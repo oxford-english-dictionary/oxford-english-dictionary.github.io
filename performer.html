@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Mind Reader — Backstage</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0a;
+      color: white;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+    }
+
+    /* ── Channel switcher ── */
+    #channel-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: #111;
+      border-bottom: 1px solid #222;
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px 16px;
+      z-index: 100;
+    }
+    .ch-btn {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      color: #666;
+      padding: 6px 16px;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 3px;
+      font-family: Arial, sans-serif;
+      transition: all 0.15s;
+    }
+    .ch-btn:hover { border-color: #555; color: #aaa; }
+    .ch-btn.active {
+      background: #1a2a1a;
+      border-color: #2ecc71;
+      color: #2ecc71;
+    }
+    .ch-btn.active.atlas {
+      background: #1a2233;
+      border-color: #0eb8e8;
+      color: #0eb8e8;
+    }
+    .ch-btn.active.celebrity {
+      background: #2a1a1a;
+      border-color: #e84040;
+      color: #e84040;
+    }
+    .ch-btn.active.random {
+      background: #2a2a1a;
+      border-color: #e8b830;
+      color: #e8b830;
+    }
+
+    /* ── Main display ── */
+    #main-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 60px;
+    }
+
+    .status {
+      font-size: 13px;
+      color: #555;
+      margin-bottom: 40px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .status.connected { color: #2ecc71; }
+    .status.waiting { color: #888; }
+
+    #channel-label {
+      font-size: 11px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    .label {
+      font-size: 14px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: #444;
+      margin-bottom: 20px;
+    }
+
+    #word-display {
+      font-size: 80px;
+      font-weight: bold;
+      color: #fff;
+      letter-spacing: 4px;
+      min-height: 100px;
+      transition: opacity 0.2s, transform 0.2s;
+      opacity: 0;
+      transform: scale(0.95);
+      text-shadow: 0 0 40px rgba(255,255,255,0.15);
+      max-width: 90vw;
+      word-break: break-word;
+    }
+
+    #word-display.visible {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    #word-display.flash {
+      color: #a78bfa;
+      text-shadow: 0 0 60px rgba(167,139,250,0.5);
+    }
+
+    #word-display.flash.atlas-mode {
+      color: #7ecbdf;
+      text-shadow: 0 0 60px rgba(126,203,223,0.5);
+    }
+
+    #word-display.flash.celebrity-mode {
+      color: #e84040;
+      text-shadow: 0 0 60px rgba(232,64,64,0.5);
+    }
+
+    #word-display.flash.random-mode {
+      color: #e8b830;
+      text-shadow: 0 0 60px rgba(232,184,48,0.5);
+    }
+
+    .history {
+      margin-top: 50px;
+      color: #333;
+      font-size: 13px;
+      letter-spacing: 1px;
+    }
+    .history span {
+      display: inline-block;
+      margin: 0 8px;
+      transition: color 0.5s;
+    }
+    .history span.recent { color: #555; }
+  </style>
+</head>
+<body>
+
+  <!-- Channel switcher -->
+  <div id="channel-bar">
+    <button class="ch-btn active" data-channel="dictionary" onclick="switchChannel('dictionary')">Dictionary</button>
+    <button class="ch-btn atlas"  data-channel="atlas"      onclick="switchChannel('atlas')">Atlas</button>
+    <button class="ch-btn celebrity" data-channel="celebrity" onclick="switchChannel('celebrity')">Celebrity</button>
+    <button class="ch-btn random" data-channel="random" onclick="switchChannel('random')">Random</button>
+  </div>
+
+  <div id="main-wrap">
+    <div class="status waiting" id="status">● Connecting...</div>
+    <div id="channel-label">Dictionary</div>
+    <div class="label">They are thinking of...</div>
+    <div id="word-display"></div>
+    <div class="history" id="history"></div>
+  </div>
+
+<script>
+  const CHANNELS = {
+    dictionary: {
+      url:   'https://global-search-stats-default-rtdb.firebaseio.com/chosenWord.json',
+      label: 'Dictionary',
+    },
+    atlas: {
+      url:   'https://global-search-stats-default-rtdb.firebaseio.com/chosenPlace.json',
+      label: 'World Atlas',
+    },
+    celebrity: {
+      url:   'https://global-search-stats-default-rtdb.firebaseio.com/chosenCelebrity.json',
+      label: 'Celebrity',
+    },
+    random: {
+      url:   'https://global-search-stats-default-rtdb.firebaseio.com/chosenRandom.json',
+      label: 'Random Word',
+    },
+  };
+
+  const display     = document.getElementById('word-display');
+  const statusEl    = document.getElementById('status');
+  const historyEl   = document.getElementById('history');
+  const channelLbl  = document.getElementById('channel-label');
+
+  let wordHistory  = [];
+  let lastWord     = null;
+  let flashTimeout;
+  let pollInterval;
+  let currentChannel = 'dictionary';
+
+  function switchChannel(name) {
+    if (name === currentChannel) return;
+    currentChannel = name;
+
+    document.querySelectorAll('.ch-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.channel === name);
+    });
+
+    channelLbl.textContent = CHANNELS[name].label;
+    display.classList.remove('atlas-mode', 'celebrity-mode', 'random-mode');
+    if (name !== 'dictionary') {
+      display.classList.add(name + '-mode');
+    }
+
+    // reset display
+    lastWord = null;
+    wordHistory = [];
+    historyEl.innerHTML = '';
+    display.className = '';
+    display.textContent = '';
+
+    clearInterval(pollInterval);
+    poll();
+    pollInterval = setInterval(poll, 500);
+  }
+
+  function showWord(word) {
+    if (word === lastWord) return;
+    lastWord = word;
+
+    clearTimeout(flashTimeout);
+    const modeClass = currentChannel !== 'dictionary' ? currentChannel + '-mode' : '';
+    display.className = modeClass;
+    display.textContent = word;
+
+    requestAnimationFrame(() => {
+      display.className = 'visible flash' + (modeClass ? ' ' + modeClass : '');
+      flashTimeout = setTimeout(() => {
+        display.classList.remove('flash');
+      }, 600);
+    });
+
+    wordHistory.push(word);
+    if (wordHistory.length > 6) wordHistory.shift();
+    renderHistory();
+  }
+
+  function renderHistory() {
+    historyEl.innerHTML = wordHistory
+      .slice(0, -1)
+      .map((w, i) => `<span class="${i === wordHistory.length - 2 ? 'recent' : ''}">${w}</span>`)
+      .join(' · ');
+  }
+
+  async function poll() {
+    const ch = CHANNELS[currentChannel];
+    try {
+      const r = await fetch(ch.url);
+      if (r.ok) {
+        const word = await r.json();
+        if (word) {
+          statusEl.textContent = '● Live';
+          statusEl.className = 'status connected';
+          showWord(word);
+        }
+      }
+    } catch (e) {
+      statusEl.textContent = '● No connection';
+      statusEl.className = 'status waiting';
+    }
+  }
+
+  poll();
+  pollInterval = setInterval(poll, 500);
+</script>
+
+</body>
+</html>
