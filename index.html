@@ -650,7 +650,7 @@ function showLetter(letter, page) {
     btn.className   = 'word-btn';
     btn.textContent = word;
 
-    btn.addEventListener('mouseenter', (e) => {
+    function showWordPopup(word, x, y) {
       if (word !== lastSentWord) {
         lastSentWord = word;
         fetch(DB_URL, {
@@ -661,7 +661,7 @@ function showLetter(letter, page) {
       }
 
       popup.style.display = 'block';
-      placePopup(e.clientX, e.clientY);
+      placePopup(x, y);
       popWord.textContent    = word;
       popPos.textContent     = '';
       popDef.textContent     = '';
@@ -670,19 +670,31 @@ function showLetter(letter, page) {
 
       fetchDefinition(word).then(result => {
         if (popWord.textContent !== word) return;
-        if (!result) { hidePopup(); return; }
         popLoading.textContent = '';
-        popPos.textContent     = result.pos;
-        popDef.textContent     = result.text;
-        popEx.textContent      = '';
+        if (!result) {
+          popPos.textContent = '';
+          popDef.textContent = 'Definition not available in this edition. See the full OED entry for details.';
+        } else {
+          popPos.textContent = result.pos;
+          popDef.textContent = result.text;
+        }
+        popEx.textContent = '';
       });
-    });
+    }
+
+    btn.addEventListener('mouseenter', (e) => showWordPopup(word, e.clientX, e.clientY));
 
     btn.addEventListener('mousemove', (e) => {
       if (popup.style.display === 'block') placePopup(e.clientX, e.clientY);
     });
 
     btn.addEventListener('mouseleave', hidePopup);
+
+    btn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      showWordPopup(word, touch.clientX, touch.clientY);
+    }, { passive: false });
 
     wordGrid.appendChild(btn);
   });
@@ -740,6 +752,10 @@ function pgEllipsis() {
   s.style.color = '#888';
   return s;
 }
+
+document.addEventListener('touchstart', (e) => {
+  if (!e.target.classList.contains('word-btn')) hidePopup();
+});
 
 showLetter('S');
 </script>
