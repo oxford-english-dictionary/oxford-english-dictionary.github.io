@@ -605,17 +605,17 @@ function hidePopup() {
 async function fetchDefinition(word) {
   if (defCache[word] !== undefined) return defCache[word];
   try {
-    const url  = `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dp&max=1`;
+    const url  = `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`;
     const res  = await fetch(url);
+    if (!res.ok) { defCache[word] = null; return null; }
     const data = await res.json();
-    if (!data || !data[0] || !data[0].defs || !data[0].defs[0]) {
+    if (!data || !data[0] || !data[0].meanings || !data[0].meanings[0]) {
       defCache[word] = null;
       return null;
     }
-    const raw  = data[0].defs[0];
-    const tab  = raw.indexOf('\t');
-    const pos  = tab >= 0 ? raw.slice(0, tab) : '';
-    const text = tab >= 0 ? raw.slice(tab + 1) : raw;
+    const meaning = data[0].meanings[0];
+    const pos     = meaning.partOfSpeech || '';
+    const text    = meaning.definitions[0]?.definition || '';
     defCache[word] = { pos, text };
     return defCache[word];
   } catch (e) {
